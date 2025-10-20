@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { FileText, DollarSign, Dumbbell, UtensilsCrossed, Cpu } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 export default function Home() {
   const [isTouch, setIsTouch] = useState(false)
@@ -139,9 +140,5 @@ export default function Home() {
       </div>
     </div>
   )
-}
-
-function cn(...classes) {
-  return classes.filter(Boolean).join(' ')
 }
 
