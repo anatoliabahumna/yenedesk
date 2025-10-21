@@ -12,7 +12,10 @@
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
-    "better-sqlite3": "^9.2.2"
+    "better-sqlite3": "^9.2.2",
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^7.5.0",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
