@@ -22,6 +22,7 @@ app.use(helmet({
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],
+      upgradeInsecureRequests: null,
     },
   },
   hsts: {
