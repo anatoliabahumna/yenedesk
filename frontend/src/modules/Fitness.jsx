@@ -5,7 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Loader2 } from 'lucide-react'
+import { request } from '@/lib/api'
+import { useToast } from '@/components/ui/toast.jsx'
 
 export default function Fitness() {
   const [workouts, setWorkouts] = useState([])
@@ -17,39 +19,70 @@ export default function Fitness() {
     date: new Date().toISOString().split('T')[0],
     note: '',
   })
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
+  const toast = useToast()
 
   useEffect(() => {
     fetchWorkouts()
   }, [])
 
-  const fetchWorkouts = async () => {
-    const response = await fetch('/api/fitness/workouts')
-    const data = await response.json()
-    setWorkouts(data)
+  const fetchWorkouts = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setIsLoading(true)
+      setLoadError(null)
+    }
+    try {
+      const data = await request('/api/fitness/workouts')
+      setWorkouts(Array.isArray(data) ? data : [])
+    } catch (error) {
+      if (!silent) {
+        setLoadError(error.message || 'Failed to load workouts')
+      }
+      toast({
+        title: 'Unable to load workouts',
+        description: error.message,
+        variant: 'error',
+      })
+    } finally {
+      if (!silent) {
+        setIsLoading(false)
+      }
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (currentWorkout) {
-      await fetch(`/api/fitness/workouts/${currentWorkout.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+    try {
+      if (currentWorkout) {
+        await request(`/api/fitness/workouts/${currentWorkout.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+        toast({ title: 'Workout updated', description: 'Your workout has been updated.', variant: 'success' })
+      } else {
+        await request('/api/fitness/workouts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+        toast({ title: 'Workout logged', description: 'A new workout has been added.', variant: 'success' })
+      }
+      setIsDialogOpen(false)
+      setFormData({
+        date: new Date().toISOString().split('T')[0],
+        note: '',
       })
-    } else {
-      await fetch('/api/fitness/workouts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+      setCurrentWorkout(null)
+      fetchWorkouts({ silent: true })
+    } catch (error) {
+      toast({
+        title: currentWorkout ? 'Unable to update workout' : 'Unable to create workout',
+        description: error.message,
+        variant: 'error',
       })
     }
-    setIsDialogOpen(false)
-    setFormData({
-      date: new Date().toISOString().split('T')[0],
-      note: '',
-    })
-    setCurrentWorkout(null)
-    fetchWorkouts()
   }
 
   const handleEdit = (workout) => {
@@ -62,10 +95,20 @@ export default function Fitness() {
   }
 
   const handleDelete = async () => {
-    await fetch(`/api/fitness/workouts/${workoutToDelete.id}`, { method: 'DELETE' })
-    setIsDeleteDialogOpen(false)
-    setWorkoutToDelete(null)
-    fetchWorkouts()
+    if (!workoutToDelete) return
+    try {
+      await request(`/api/fitness/workouts/${workoutToDelete.id}`, { method: 'DELETE' })
+      toast({ title: 'Workout deleted', description: 'The workout has been removed.', variant: 'success' })
+      setIsDeleteDialogOpen(false)
+      setWorkoutToDelete(null)
+      fetchWorkouts({ silent: true })
+    } catch (error) {
+      toast({
+        title: 'Unable to delete workout',
+        description: error.message,
+        variant: 'error',
+      })
+    }
   }
 
   const openNewDialog = () => {
@@ -90,53 +133,100 @@ export default function Fitness() {
         </Button>
       </div>
 
-      {workouts.length === 0 ? (
+      {isLoading ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">Loading your workouts…</p>
+          </CardContent>
+        </Card>
+      ) : loadError ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+            <Button variant="outline" onClick={() => fetchWorkouts()}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : workouts.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <p className="text-muted-foreground">No workouts yet. Log your first workout!</p>
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[480px] table-fixed">
-              <thead className="border-b">
-                <tr className="text-left">
-                  <th className="p-4">Date</th>
-                  <th className="p-4">Notes</th>
-                  <th className="p-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {workouts.map((workout) => (
-                  <tr key={workout.id} className="border-b last:border-0">
-                    <td className="p-4 font-semibold">{workout.date}</td>
-                    <td className="p-4 text-muted-foreground whitespace-pre-wrap break-words">{workout.note}</td>
-                    <td className="p-4">
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="ghost" onClick={() => handleEdit(workout)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => {
-                            setWorkoutToDelete(workout)
-                            setIsDeleteDialogOpen(true)
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
+        <div className="space-y-4">
+          <Card className="hidden md:block">
+            <CardContent className="p-0">
+              <table className="w-full table-auto">
+                <thead className="border-b text-sm font-semibold text-muted-foreground">
+                  <tr className="text-left">
+                    <th className="p-4">Date</th>
+                    <th className="p-4">Notes</th>
+                    <th className="p-4">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </CardContent>
-        </Card>
+                </thead>
+                <tbody>
+                  {workouts.map((workout) => (
+                    <tr key={workout.id} className="border-b last:border-0">
+                      <td className="p-4 font-semibold align-top">{workout.date}</td>
+                      <td className="p-4 text-muted-foreground whitespace-pre-wrap break-words align-top">{workout.note}</td>
+                      <td className="p-4 align-top">
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => handleEdit(workout)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setWorkoutToDelete(workout)
+                              setIsDeleteDialogOpen(true)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+          <div className="space-y-3 md:hidden">
+            {workouts.map((workout) => (
+              <Card key={workout.id}>
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">{workout.date}</p>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleEdit(workout)}>
+                        <Edit className="mr-2 h-4 w-4" /> Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setWorkoutToDelete(workout)
+                          setIsDeleteDialogOpen(true)
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      </Button>
+                    </div>
+                  </div>
+                  {workout.note ? (
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{workout.note}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No notes recorded.</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

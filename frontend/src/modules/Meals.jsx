@@ -5,7 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Loader2 } from 'lucide-react'
+import { request } from '@/lib/api'
+import { useToast } from '@/components/ui/toast.jsx'
 
 export default function Meals() {
   const [recipes, setRecipes] = useState([])
@@ -29,44 +31,92 @@ export default function Meals() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [itemToDelete, setItemToDelete] = useState(null)
   const [deleteType, setDeleteType] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
+  const toast = useToast()
 
   useEffect(() => {
-    fetchRecipes()
-    fetchMealPlans()
+    loadInitialData()
   }, [])
 
-  const fetchRecipes = async () => {
-    const response = await fetch('/api/meal/recipes')
-    const data = await response.json()
-    setRecipes(data)
+  const loadInitialData = async () => {
+    setIsLoading(true)
+    setLoadError(null)
+    try {
+      const [recipeData, planData] = await Promise.all([
+        request('/api/meal/recipes'),
+        request('/api/meal/plans'),
+      ])
+      setRecipes(Array.isArray(recipeData) ? recipeData : [])
+      setMealPlans(Array.isArray(planData) ? planData : [])
+    } catch (error) {
+      setLoadError(error.message || 'Failed to load meal data')
+      toast({
+        title: 'Unable to load meal data',
+        description: error.message,
+        variant: 'error',
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const fetchMealPlans = async () => {
-    const response = await fetch('/api/meal/plans')
-    const data = await response.json()
-    setMealPlans(data)
+  const refreshRecipes = async () => {
+    try {
+      const data = await request('/api/meal/recipes')
+      setRecipes(Array.isArray(data) ? data : [])
+    } catch (error) {
+      toast({
+        title: 'Failed to refresh recipes',
+        description: error.message,
+        variant: 'error',
+      })
+    }
+  }
+
+  const refreshMealPlans = async () => {
+    try {
+      const data = await request('/api/meal/plans')
+      setMealPlans(Array.isArray(data) ? data : [])
+    } catch (error) {
+      toast({
+        title: 'Failed to refresh meal plans',
+        description: error.message,
+        variant: 'error',
+      })
+    }
   }
 
   // Recipe handlers
   const handleRecipeSubmit = async (e) => {
     e.preventDefault()
-    if (currentRecipe) {
-      await fetch(`/api/meal/recipes/${currentRecipe.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(recipeForm),
-      })
-    } else {
-      await fetch('/api/meal/recipes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(recipeForm),
+    try {
+      if (currentRecipe) {
+        await request(`/api/meal/recipes/${currentRecipe.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recipeForm),
+        })
+        toast({ title: 'Recipe updated', description: 'Changes saved successfully.', variant: 'success' })
+      } else {
+        await request('/api/meal/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recipeForm),
+        })
+        toast({ title: 'Recipe created', description: 'A new recipe has been added.', variant: 'success' })
+      }
+      setIsRecipeDialogOpen(false)
+      setRecipeForm({ title: '', ingredients: '', steps: '' })
+      setCurrentRecipe(null)
+      refreshRecipes()
+    } catch (error) {
+      toast({
+        title: currentRecipe ? 'Unable to update recipe' : 'Unable to create recipe',
+        description: error.message,
+        variant: 'error',
       })
     }
-    setIsRecipeDialogOpen(false)
-    setRecipeForm({ title: '', ingredients: '', steps: '' })
-    setCurrentRecipe(null)
-    fetchRecipes()
   }
 
   const handleEditRecipe = (recipe) => {
@@ -76,35 +126,55 @@ export default function Meals() {
   }
 
   const handleDeleteRecipe = async () => {
-    await fetch(`/api/meal/recipes/${itemToDelete.id}`, { method: 'DELETE' })
-    setIsDeleteDialogOpen(false)
-    setItemToDelete(null)
-    fetchRecipes()
+    if (!itemToDelete) return
+    try {
+      await request(`/api/meal/recipes/${itemToDelete.id}`, { method: 'DELETE' })
+      toast({ title: 'Recipe deleted', description: 'The recipe has been removed.', variant: 'success' })
+      setIsDeleteDialogOpen(false)
+      setItemToDelete(null)
+      refreshRecipes()
+    } catch (error) {
+      toast({
+        title: 'Unable to delete recipe',
+        description: error.message,
+        variant: 'error',
+      })
+    }
   }
 
   // Meal plan handlers
   const handlePlanSubmit = async (e) => {
     e.preventDefault()
-    if (currentPlan) {
-      await fetch(`/api/meal/plans/${currentPlan.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planForm),
+    try {
+      if (currentPlan) {
+        await request(`/api/meal/plans/${currentPlan.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(planForm),
+        })
+        toast({ title: 'Meal plan updated', description: 'Your plan has been updated.', variant: 'success' })
+      } else {
+        await request('/api/meal/plans', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(planForm),
+        })
+        toast({ title: 'Meal plan created', description: 'A new meal plan has been added.', variant: 'success' })
+      }
+      setIsPlanDialogOpen(false)
+      setPlanForm({
+        date: new Date().toISOString().split('T')[0],
+        note: '',
       })
-    } else {
-      await fetch('/api/meal/plans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planForm),
+      setCurrentPlan(null)
+      refreshMealPlans()
+    } catch (error) {
+      toast({
+        title: currentPlan ? 'Unable to update meal plan' : 'Unable to create meal plan',
+        description: error.message,
+        variant: 'error',
       })
     }
-    setIsPlanDialogOpen(false)
-    setPlanForm({
-      date: new Date().toISOString().split('T')[0],
-      note: '',
-    })
-    setCurrentPlan(null)
-    fetchMealPlans()
   }
 
   const handleEditPlan = (plan) => {
@@ -114,10 +184,20 @@ export default function Meals() {
   }
 
   const handleDeletePlan = async () => {
-    await fetch(`/api/meal/plans/${itemToDelete.id}`, { method: 'DELETE' })
-    setIsDeleteDialogOpen(false)
-    setItemToDelete(null)
-    fetchMealPlans()
+    if (!itemToDelete) return
+    try {
+      await request(`/api/meal/plans/${itemToDelete.id}`, { method: 'DELETE' })
+      toast({ title: 'Meal plan deleted', description: 'The meal plan has been removed.', variant: 'success' })
+      setIsDeleteDialogOpen(false)
+      setItemToDelete(null)
+      refreshMealPlans()
+    } catch (error) {
+      toast({
+        title: 'Unable to delete meal plan',
+        description: error.message,
+        variant: 'error',
+      })
+    }
   }
 
   const openNewRecipe = () => {
@@ -158,7 +238,23 @@ export default function Meals() {
         </div>
       </div>
 
-      {view === 'plans' ? (
+      {isLoading ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">Loading your meal data…</p>
+          </CardContent>
+        </Card>
+      ) : loadError ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+            <Button variant="outline" onClick={loadInitialData}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : view === 'plans' ? (
         <div>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Meal Plans</h2>
@@ -175,47 +271,79 @@ export default function Meals() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <CardContent className="p-0">
-                <div className="w-full overflow-x-auto">
-                <table className="w-full min-w-[560px] table-fixed">
-                  <thead className="border-b">
-                    <tr className="text-left">
-                      <th className="p-4">Date</th>
-                      <th className="p-4">Plan</th>
-                      <th className="p-4">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mealPlans.map((plan) => (
-                      <tr key={plan.id} className="border-b last:border-0">
-                        <td className="p-4 font-semibold">{plan.date}</td>
-                        <td className="p-4 text-muted-foreground whitespace-pre-wrap break-words">{plan.note}</td>
-                        <td className="p-4">
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => handleEditPlan(plan)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setItemToDelete(plan)
-                                setDeleteType('plan')
-                                setIsDeleteDialogOpen(true)
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
+            <div className="space-y-4">
+              <Card className="hidden md:block">
+                <CardContent className="p-0">
+                  <table className="w-full table-auto">
+                    <thead className="border-b text-sm font-semibold text-muted-foreground">
+                      <tr className="text-left">
+                        <th className="p-4">Date</th>
+                        <th className="p-4">Plan</th>
+                        <th className="p-4">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
-              </CardContent>
-            </Card>
+                    </thead>
+                    <tbody>
+                      {mealPlans.map((plan) => (
+                        <tr key={plan.id} className="border-b last:border-0">
+                          <td className="p-4 font-semibold align-top">{plan.date}</td>
+                          <td className="p-4 text-muted-foreground whitespace-pre-wrap break-words align-top">{plan.note}</td>
+                          <td className="p-4 align-top">
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="ghost" onClick={() => handleEditPlan(plan)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setItemToDelete(plan)
+                                  setDeleteType('plan')
+                                  setIsDeleteDialogOpen(true)
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+              <div className="space-y-3 md:hidden">
+                {mealPlans.map((plan) => (
+                  <Card key={plan.id}>
+                    <CardContent className="space-y-3 p-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold">{plan.date}</p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleEditPlan(plan)}>
+                            <Edit className="mr-2 h-4 w-4" /> Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setItemToDelete(plan)
+                              setDeleteType('plan')
+                              setIsDeleteDialogOpen(true)
+                            }}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </Button>
+                        </div>
+                      </div>
+                      {plan.note ? (
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{plan.note}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No details recorded.</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       ) : (
@@ -245,13 +373,13 @@ export default function Meals() {
                     <div className="space-y-3">
                       <div>
                         <h4 className="font-semibold text-sm mb-1">Ingredients:</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap md:line-clamp-3">
                           {recipe.ingredients}
                         </p>
                       </div>
                       <div>
                         <h4 className="font-semibold text-sm mb-1">Steps:</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap md:line-clamp-3">
                           {recipe.steps}
                         </p>
                       </div>

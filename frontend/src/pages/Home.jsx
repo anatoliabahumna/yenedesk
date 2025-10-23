@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, DollarSign, Dumbbell, UtensilsCrossed, Cpu } from 'lucide-react'
+import { FileText, DollarSign, Dumbbell, UtensilsCrossed, Cpu, GripVertical } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -104,6 +104,12 @@ export default function Home() {
         <p className="text-muted-foreground mt-2">
           A private, local-only app to organize your everyday life
         </p>
+        {!isTouch && (
+          <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <GripVertical className="h-4 w-4" aria-hidden="true" />
+            Drag the cards by their handle to personalize your home view
+          </p>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -117,21 +123,38 @@ export default function Home() {
               onDragOver={!isTouch ? onDragOver : undefined}
               onDrop={!isTouch ? (e) => onDrop(e, idx) : undefined}
               onDragEnd={!isTouch ? onDragEnd : undefined}
-              className="rounded-lg"
+              className={cn(
+                'rounded-lg border border-transparent transition-shadow',
+                !isTouch && 'cursor-grab active:cursor-grabbing'
+              )}
+              title={!isTouch ? 'Drag to reorder home modules' : undefined}
             >
               <Link to={module.path}>
-                <Card className="transition-shadow hover:shadow-lg cursor-pointer">
+                <Card className="cursor-pointer transition-shadow hover:shadow-lg">
                   <CardHeader>
-                    <div className="flex items-center gap-4">
-                      <div className={cn('p-3 rounded-lg bg-secondary', module.color)}>
-                        <Icon className="h-6 w-6" />
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className={cn('rounded-lg bg-secondary p-3', module.color)}>
+                          <Icon className="h-6 w-6" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <CardTitle>{module.name}</CardTitle>
+                          <CardDescription>{module.description}</CardDescription>
+                        </div>
                       </div>
-                      <div>
-                        <CardTitle>{module.name}</CardTitle>
-                        <CardDescription>{module.description}</CardDescription>
-                      </div>
+                      {!isTouch && (
+                        <span
+                          className="mt-1 flex h-8 w-8 items-center justify-center rounded-md bg-muted/60 text-muted-foreground"
+                          aria-hidden="true"
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </span>
+                      )}
                     </div>
                   </CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-muted-foreground">Tap to open the module, drag to change its position.</p>
+                  </CardContent>
                 </Card>
               </Link>
             </div>

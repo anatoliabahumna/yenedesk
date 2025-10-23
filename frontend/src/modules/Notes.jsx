@@ -5,7 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, Edit, Trash2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Loader2 } from 'lucide-react'
+import { request } from '@/lib/api'
+import { useToast } from '@/components/ui/toast.jsx'
 
 export default function Notes() {
   const [notes, setNotes] = useState([])
@@ -14,36 +16,67 @@ export default function Notes() {
   const [currentNote, setCurrentNote] = useState(null)
   const [noteToDelete, setNoteToDelete] = useState(null)
   const [formData, setFormData] = useState({ title: '', content: '' })
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
+  const toast = useToast()
 
   useEffect(() => {
     fetchNotes()
   }, [])
 
-  const fetchNotes = async () => {
-    const response = await fetch('/api/notes')
-    const data = await response.json()
-    setNotes(data)
+  const fetchNotes = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setIsLoading(true)
+      setLoadError(null)
+    }
+    try {
+      const data = await request('/api/notes')
+      setNotes(Array.isArray(data) ? data : [])
+    } catch (error) {
+      if (!silent) {
+        setLoadError(error.message || 'Failed to load notes')
+      }
+      toast({
+        title: 'Failed to load notes',
+        description: error.message,
+        variant: 'error',
+      })
+    } finally {
+      if (!silent) {
+        setIsLoading(false)
+      }
+    }
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (currentNote) {
-      await fetch(`/api/notes/${currentNote.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-    } else {
-      await fetch('/api/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+    try {
+      if (currentNote) {
+        await request(`/api/notes/${currentNote.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+        toast({ title: 'Note updated', description: 'Your changes have been saved.', variant: 'success' })
+      } else {
+        await request('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+        toast({ title: 'Note created', description: 'A new note has been added.', variant: 'success' })
+      }
+      setIsDialogOpen(false)
+      setFormData({ title: '', content: '' })
+      setCurrentNote(null)
+      fetchNotes({ silent: true })
+    } catch (error) {
+      toast({
+        title: currentNote ? 'Unable to update note' : 'Unable to create note',
+        description: error.message,
+        variant: 'error',
       })
     }
-    setIsDialogOpen(false)
-    setFormData({ title: '', content: '' })
-    setCurrentNote(null)
-    fetchNotes()
   }
 
   const handleEdit = (note) => {
@@ -53,10 +86,20 @@ export default function Notes() {
   }
 
   const handleDelete = async () => {
-    await fetch(`/api/notes/${noteToDelete.id}`, { method: 'DELETE' })
-    setIsDeleteDialogOpen(false)
-    setNoteToDelete(null)
-    fetchNotes()
+    if (!noteToDelete) return
+    try {
+      await request(`/api/notes/${noteToDelete.id}`, { method: 'DELETE' })
+      toast({ title: 'Note deleted', description: 'The note has been removed.', variant: 'success' })
+      setIsDeleteDialogOpen(false)
+      setNoteToDelete(null)
+      fetchNotes({ silent: true })
+    } catch (error) {
+      toast({
+        title: 'Unable to delete note',
+        description: error.message,
+        variant: 'error',
+      })
+    }
   }
 
   const openNewDialog = () => {
@@ -78,7 +121,23 @@ export default function Notes() {
         </Button>
       </div>
 
-      {notes.length === 0 ? (
+      {isLoading ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-3 py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">Loading your notes…</p>
+          </CardContent>
+        </Card>
+      ) : loadError ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <p className="text-sm text-muted-foreground">{loadError}</p>
+            <Button onClick={() => fetchNotes()} variant="outline">
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : notes.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <p className="text-muted-foreground">No notes yet. Create your first note!</p>
