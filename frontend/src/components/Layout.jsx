@@ -1,5 +1,17 @@
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { FileText, DollarSign, Dumbbell, UtensilsCrossed, Home, Moon, Sun, Cpu, Menu, X } from 'lucide-react'
+import {
+  FileText,
+  DollarSign,
+  Dumbbell,
+  UtensilsCrossed,
+  Home,
+  Moon,
+  Sun,
+  Cpu,
+  Menu,
+  X,
+  GripVertical,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -85,6 +97,12 @@ export default function Layout() {
 
   const SidebarContent = ({ onNavigate }) => (
     <nav className="flex-1 space-y-1 p-4">
+      {!isTouch && (
+        <p className="flex items-center gap-2 px-1 pb-2 text-xs text-muted-foreground">
+          <GripVertical className="h-3 w-3" aria-hidden="true" />
+          Drag the handle to reorder
+        </p>
+      )}
       {items.map((item, idx) => {
         const Icon = item.icon
         const isActive = location.pathname === item.path
@@ -96,21 +114,37 @@ export default function Layout() {
             onDragOver={!isTouch ? onDragOver : undefined}
             onDrop={!isTouch ? (e) => onDrop(e, idx) : undefined}
             onDragEnd={!isTouch ? onDragEnd : undefined}
-            className="rounded-lg"
+            className={cn(
+              'group rounded-lg border border-transparent',
+              !isTouch && 'cursor-grab active:cursor-grabbing'
+            )}
+            title={!isTouch ? 'Drag to reorder navigation' : undefined}
           >
-            <Link
-              to={item.path}
-              onClick={onNavigate}
+            <div
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'flex items-center overflow-hidden rounded-lg transition-colors',
                 isActive
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )}
             >
-              <Icon className="h-5 w-5" />
-              {item.name}
-            </Link>
+              {!isTouch && (
+                <span
+                  className="flex h-full items-center bg-muted/40 px-2 text-muted-foreground/80 transition group-hover:text-muted-foreground"
+                  aria-hidden="true"
+                >
+                  <GripVertical className="h-4 w-4" />
+                </span>
+              )}
+              <Link
+                to={item.path}
+                onClick={onNavigate}
+                className="flex flex-1 items-center gap-3 px-3 py-2 text-sm font-medium"
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                <span>{item.name}</span>
+              </Link>
+            </div>
           </div>
         )
       })}
